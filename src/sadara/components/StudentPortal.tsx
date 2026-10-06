@@ -29,7 +29,7 @@ export const StudentPortal: React.FC = () => {
 
   // Video player interactive state
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [playerMode, setPlayerMode] = useState<'interactive' | 'video' | 'embed'>('interactive');
+  const [playerMode, setPlayerMode] = useState<'interactive' | 'video' | 'embed'>('video');
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(300); // 5 minutes sample
@@ -39,7 +39,7 @@ export const StudentPortal: React.FC = () => {
 
   // Timer loop for interactive lecture playback
   useEffect(() => {
-    let timer: NodeJS.Timeout;
+    let timer: ReturnType<typeof setInterval>;
     if (isPlaying) {
       timer = setInterval(() => {
         setCurrentTime((prev) => {
@@ -64,7 +64,7 @@ export const StudentPortal: React.FC = () => {
       type: 'محاضرة تفاعلية كاملة',
       typeEn: 'Interactive Masterclass',
       completed: true,
-      videoSrc: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+      videoSrc: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4',
       embedSrc: 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ',
       keyFormula: 'قانون التناسب العكسي: (س₁ × ص₁ = س₂ × ص₂)',
       keyFormulaEn: 'Inverse Proportion Rule: (x₁ · y₁ = x₂ · y₂)',
@@ -82,7 +82,7 @@ export const StudentPortal: React.FC = () => {
       type: 'جلسة زوم مسجلة',
       typeEn: 'Recorded Zoom Masterclass',
       completed: true,
-      videoSrc: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+      videoSrc: 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4',
       embedSrc: 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ',
       keyFormula: 'قاعدة الربط: أداة : وظيفتها | سبب : نتيجة',
       keyFormulaEn: 'Relationship Rule: Tool : Function | Cause : Effect',
@@ -100,7 +100,7 @@ export const StudentPortal: React.FC = () => {
       type: 'تفاعلي مع المحاكي',
       typeEn: 'Live Nuclear Simulation',
       completed: true,
-      videoSrc: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+      videoSrc: 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.webm',
       embedSrc: 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ',
       keyFormula: 'انشطار اليورانيوم: ²³⁵U + ¹n → ¹⁴¹Ba + ⁹²Kr + 3 ¹n + Energy',
       keyFormulaEn: 'Uranium Fission: ²³⁵U + ¹n → ¹⁴¹Ba + ⁹²Kr + 3 ¹n + Energy',
@@ -118,7 +118,7 @@ export const StudentPortal: React.FC = () => {
       type: 'اختبار قياس تجريبي',
       typeEn: 'Full Mock Exam',
       completed: false,
-      videoSrc: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
+      videoSrc: 'https://test-videos.co.uk/vids/jellyfish/mp4/h264/360/Jellyfish_360_10s_1MB.mp4',
       embedSrc: 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ',
       keyFormula: 'إدارة الوقت: دقيقة واحدة بحد أقصى لكل سؤال',
       keyFormulaEn: 'Time Pacing: Max 60 seconds per question',
