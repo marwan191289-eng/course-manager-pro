@@ -129,7 +129,7 @@ export const StudentPortal: React.FC = () => {
     },
   ];
 
-  const currentLessonData = lessons[selectedLesson];
+  const currentLessonData = lessons[selectedLesson] ?? lessons[0]!;
 
   // Video controls
   const togglePlay = () => {
