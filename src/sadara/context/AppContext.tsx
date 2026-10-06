@@ -346,7 +346,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateBookingStatus = async (id: string, status: Booking['status']) => {
-    const patch: Record<string, string> = { status, updated_at: new Date().toISOString() };
+    const patch = { status, updated_at: new Date().toISOString() };
     const { error } = await supabase.from('bookings').update(patch).eq('id', id);
     if (error) return addNotification('خطأ', error.message, 'error');
     loadBookings();

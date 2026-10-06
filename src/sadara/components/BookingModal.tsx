@@ -36,7 +36,7 @@ export const BookingModal: React.FC = () => {
   const [step, setStep] = useState<'details' | 'payment' | 'submitted'>('details');
 
   // Country selection
-  const [selectedCountry, setSelectedCountry] = useState(COUNTRIES_LIST[0]);
+  const [selectedCountry, setSelectedCountry] = useState(COUNTRIES_LIST[0]!);
 
   // Form fields
   const [name, setName] = useState('');
@@ -88,10 +88,10 @@ export const BookingModal: React.FC = () => {
 
   const fullSelectedDate = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(selectedDayNumber).padStart(2, '0')}`;
   const dayOfWeekIndex = (new Date(currentYear, currentMonth, selectedDayNumber)).getDay();
-  const dayNameStr = lang === 'ar' ? weekDaysAr[dayOfWeekIndex] : weekDaysEn[dayOfWeekIndex];
+  const dayNameStr = (lang === 'ar' ? weekDaysAr[dayOfWeekIndex] : weekDaysEn[dayOfWeekIndex]) ?? '';
 
   const handleCountryChange = (countryCode: string) => {
-    const found = COUNTRIES_LIST.find((c) => c.code === countryCode) || COUNTRIES_LIST[0];
+    const found = COUNTRIES_LIST.find((c) => c.code === countryCode) || COUNTRIES_LIST[0]!;
     setSelectedCountry(found);
   };
 

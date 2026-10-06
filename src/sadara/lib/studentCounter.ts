@@ -9,7 +9,7 @@ function hourIncrement(h: number): number {
   // simple integer hash so the sequence looks irregular but is stable
   let x = (h * 2654435761) >>> 0;
   x ^= x >>> 13;
-  return PATTERN[x % PATTERN.length];
+  return PATTERN[x % PATTERN.length] ?? 1;
 }
 
 export function computeStudentCount(now: number): number {
