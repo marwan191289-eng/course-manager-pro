@@ -40,7 +40,7 @@ export const BookingModal: React.FC = () => {
 
   // Form fields
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('594756878');
+  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [track, setTrack] = useState(selectedCourseForBooking || 'جلسة فردية مباشرة مكثفة (150 ر.س)');
   const [platform, setPlatform] = useState<'zoom' | 'meet'>('zoom');
@@ -48,9 +48,11 @@ export const BookingModal: React.FC = () => {
 
   // Calendar State (Interactive Month Calendar)
   const today = new Date();
-  const [currentYear, setCurrentYear] = useState(2026);
-  const [currentMonth, setCurrentMonth] = useState(9); // October
-  const [selectedDayNumber, setSelectedDayNumber] = useState<number>(12);
+  today.setHours(0, 0, 0, 0);
+  const [currentYear, setCurrentYear] = useState(today.getFullYear());
+  const [currentMonth, setCurrentMonth] = useState(today.getMonth());
+  const [selectedDayNumber, setSelectedDayNumber] = useState<number>(Math.min(today.getDate() + 1, new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate()));
+  const [submitError, setSubmitError] = useState('');
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string>('6:00 م');
 
   // Payment form state
@@ -93,54 +95,36 @@ export const BookingModal: React.FC = () => {
     setSelectedCountry(found);
   };
 
-  const handleProceedToPayment = (e: React.FormEvent) => {
+  const handleProceedToPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !phone || !email) return;
-    setCardHolder(name);
-    setStep('payment');
-  };
-
-  const handleProcessPayment = () => {
+    setSubmitError('');
     setIsProcessing(true);
-    setTimeout(() => {
-      setIsProcessing(false);
-
-      // Book with status: PENDING (requires teacher approval from Admin Dashboard!)
-      const fullPhone = `${selectedCountry.dial} ${phone}`;
-      const newB = addBooking({
-        studentName: name,
-        studentPhone: fullPhone,
-        studentEmail: email,
-        courseOrTrack: track,
-        date: fullSelectedDate,
-        timeSlot: selectedTimeSlot,
-        platform,
-        status: 'pending', // Pending teacher approval!
-        meetingUrl:
-          platform === 'zoom'
-            ? 'https://zoom.us/j/94756878' + Math.floor(10 + Math.random() * 89)
-            : 'https://meet.google.com/sadara-tutoring',
-        price,
-        paymentMethod,
-        paymentStatus: 'paid',
-        country: selectedCountry.nameAr,
-        notes,
-        reminderSent: false,
-      });
-
-      setSubmittedBookingId(newB.id);
-      setStep('submitted');
-
-      confetti({
-        particleCount: 50,
-        spread: 70,
-        origin: { y: 0.6 },
-      });
-    }, 1500);
+    const newB = await addBooking({
+      studentName: name,
+      studentPhone: `${selectedCountry.dial} ${phone}`,
+      studentEmail: email,
+      courseOrTrack: track,
+      date: fullSelectedDate,
+      weekday: dayNameStr,
+      timeSlot: selectedTimeSlot,
+      platform,
+      price,
+      country: selectedCountry.nameAr,
+      notes,
+    });
+    setIsProcessing(false);
+    if (!newB) {
+      setSubmitError(lang === 'ar' ? 'تعذر إرسال طلب الحجز، حاول مرة أخرى.' : 'Could not submit booking.');
+      return;
+    }
+    setSubmittedBookingId(newB.id.slice(0, 8).toUpperCase());
+    setStep('submitted');
+    confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 } });
   };
 
   // WhatsApp preview message
-  const waMessage = `السلام عليكم ورحمة الله، تم سداد رسوم الحجز في منصة صدارة وهو بانتظار اعتماد المدرس:%0A` +
+  const waMessage = `السلام عليكم ورحمة الله، أرسلت طلب حجز في منصة صدارة بانتظار اعتماد المدرس:%0A` +
     `👤 الطالب: ${encodeURIComponent(name)}%0A` +
     `🌍 الدولة: ${encodeURIComponent(selectedCountry.nameAr)}%0A` +
     `📚 المادة: ${encodeURIComponent(track)}%0A` +
@@ -169,7 +153,7 @@ export const BookingModal: React.FC = () => {
           </div>
           <h3 className="text-2xl font-black">
             {step === 'submitted'
-              ? (lang === 'ar' ? 'تم استلام طلب الحجز والسداد بنجاح' : 'Booking & Payment Submitted')
+              ? (lang === 'ar' ? 'تم إرسال طلب الحجز بنجاح' : 'Booking & Payment Submitted')
               : step === 'payment'
               ? (lang === 'ar' ? 'بوابة الدفع الإلكتروني المعتمدة' : 'Secure Payment Gateway')
               : (lang === 'ar' ? 'بيانات الحجز واختيار الموعد' : 'Booking Details & Schedule')}
@@ -226,19 +210,19 @@ export const BookingModal: React.FC = () => {
               <select
                 value={selectedCountry.code}
                 onChange={(e) => handleCountryChange(e.target.value)}
-                style={{ colorScheme: 'auto' }}
+                
                 className="w-full py-2.5 px-3 rounded-xl border border-slate-300 dark:border-white/15 bg-white dark:bg-[#0f172a] text-slate-900 dark:text-slate-100 font-medium text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer shadow-sm"
               >
                 <optgroup label={lang === 'ar' ? '🇸🇦 دول مجلس التعاون الخليجي' : 'Gulf States'} className="bg-white dark:bg-[#0f172a] text-slate-900 dark:text-white font-bold">
                   {COUNTRIES_LIST.filter((c) => c.region === 'gulf').map((c) => (
-                    <option key={c.code} value={c.code} className="bg-white dark:bg-[#0f172a] text-slate-900 dark:text-white py-1">
+                    <option key={c.code} value={c.code}>
                       {lang === 'ar' ? c.nameAr : c.nameEn} ({c.dial})
                     </option>
                   ))}
                 </optgroup>
                 <optgroup label={lang === 'ar' ? '🌍 بقية الدول العربية' : 'Arab Countries'} className="bg-white dark:bg-[#0f172a] text-slate-900 dark:text-white font-bold">
                   {COUNTRIES_LIST.filter((c) => c.region === 'arab').map((c) => (
-                    <option key={c.code} value={c.code} className="bg-white dark:bg-[#0f172a] text-slate-900 dark:text-white py-1">
+                    <option key={c.code} value={c.code}>
                       {lang === 'ar' ? c.nameAr : c.nameEn} ({c.dial})
                     </option>
                   ))}
@@ -312,25 +296,25 @@ export const BookingModal: React.FC = () => {
                 <select
                   value={track}
                   onChange={(e) => setTrack(e.target.value)}
-                  style={{ colorScheme: 'auto' }}
-                  className="w-full py-2.5 px-3 rounded-xl border border-slate-300 dark:border-white/15 bg-white dark:bg-[#0f172a] text-slate-900 dark:text-slate-100 font-bold text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer shadow-sm"
+                  
+                  className="sadara-select w-full py-2.5 px-3 rounded-xl border font-bold text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer shadow-sm"
                 >
-                  <option value="جلسة فردية مباشرة مكثفة (150 ر.س)" className="bg-white dark:bg-[#0f172a] text-slate-900 dark:text-white py-1">
+                  <option value="جلسة فردية مباشرة مكثفة (150 ر.س)">
                     {lang === 'ar' ? 'جلسة فردية مباشرة مكثفة (150 ر.س)' : 'Private 1-on-1 Coaching (150 SAR)'}
                   </option>
-                  <option value="باقة التفوق الخماسية 5 جلسات (650 ر.س)" className="bg-white dark:bg-[#0f172a] text-slate-900 dark:text-white py-1">
+                  <option value="باقة التفوق الخماسية 5 جلسات (650 ر.س)">
                     {lang === 'ar' ? 'باقة التفوق الخماسية 5 جلسات (650 ر.س)' : 'Excellence 5-Session Bundle (650 SAR)'}
                   </option>
-                  <option value="باقة الصدارة VIP الذهبية 10 جلسات (1,200 ر.س)" className="bg-white dark:bg-[#0f172a] text-slate-900 dark:text-white py-1">
+                  <option value="باقة الصدارة VIP الذهبية 10 جلسات (1,200 ر.س)">
                     {lang === 'ar' ? 'باقة الصدارة VIP الذهبية 10 جلسات (1,200 ر.س)' : 'VIP Gold Sadara 10-Session Bundle (1,200 SAR)'}
                   </option>
-                  <option value="قدرات كمي وتأسيس هندسي" className="bg-white dark:bg-[#0f172a] text-slate-900 dark:text-white py-1">
+                  <option value="قدرات كمي وتأسيس هندسي">
                     {lang === 'ar' ? 'قدرات كمي وتأسيس هندسي' : 'Quantitative Math & Geometry'}
                   </option>
-                  <option value="قدرات لفظي واستيعاب مقروء" className="bg-white dark:bg-[#0f172a] text-slate-900 dark:text-white py-1">
+                  <option value="قدرات لفظي واستيعاب مقروء">
                     {lang === 'ar' ? 'قدرات لفظي واستيعاب مقروء' : 'Verbal Analogy & Reading Comprehension'}
                   </option>
-                  <option value="تحصيلي كيمياء نووية وفيزياء ذرية" className="bg-white dark:bg-[#0f172a] text-slate-900 dark:text-white py-1">
+                  <option value="تحصيلي كيمياء نووية وفيزياء ذرية">
                     {lang === 'ar' ? 'تحصيلي كيمياء نووية وفيزياء ذرية' : 'Tahsili Nuclear Chemistry & Atomic Physics'}
                   </option>
                 </select>
@@ -344,6 +328,8 @@ export const BookingModal: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
+                      if (currentYear === today.getFullYear() && currentMonth === today.getMonth()) return;
+                      setSelectedDayNumber(1);
                       if (currentMonth > 0) setCurrentMonth(currentMonth - 1);
                       else {
                         setCurrentMonth(11);
@@ -364,6 +350,7 @@ export const BookingModal: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
+                      setSelectedDayNumber(1);
                       if (currentMonth < 11) setCurrentMonth(currentMonth + 1);
                       else {
                         setCurrentMonth(0);
@@ -389,19 +376,24 @@ export const BookingModal: React.FC = () => {
                     {lang === 'ar' ? w : weekDaysEn[i]}
                   </span>
                 ))}
-                {[...Array(31)].map((_, i) => {
+                {[...Array(new Date(currentYear, currentMonth, 1).getDay())].map((_, i) => (
+                  <span key={'blank' + i} />
+                ))}
+                {[...Array(new Date(currentYear, currentMonth + 1, 0).getDate())].map((_, i) => {
                   const dayNum = i + 1;
                   const isSelected = selectedDayNumber === dayNum;
-                  const isPast = dayNum < 6 && currentMonth === 9; // past days
+                  const cellDate = new Date(currentYear, currentMonth, dayNum);
+                  const isPast = cellDate <= today;
+                  const isFriday = cellDate.getDay() === 5;
                   return (
                     <button
                       key={dayNum}
                       type="button"
-                      disabled={isPast}
+                      disabled={isPast || isFriday}
                       onClick={() => setSelectedDayNumber(dayNum)}
-                      className={`h-8 rounded-lg font-bold text-xs transition cursor-pointer flex items-center justify-center ${
-                        isPast
-                          ? 'opacity-30 cursor-not-allowed line-through text-slate-400'
+                      className={`h-9 rounded-lg font-bold text-sm transition cursor-pointer flex items-center justify-center ${
+                        isPast || isFriday
+                          ? 'opacity-30 cursor-not-allowed text-slate-400'
                           : isSelected
                           ? 'bg-cyan-500 text-white shadow-md'
                           : 'hover:bg-cyan-500/15 text-slate-700 dark:text-slate-300'
@@ -475,11 +467,18 @@ export const BookingModal: React.FC = () => {
               </div>
             </div>
 
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-700 dark:text-amber-300 leading-relaxed">
+              {lang === 'ar'
+                ? 'لن يتم خصم أي مبلغ الآن. يُرسل طلبك للمهندس محمود شلتوت للمراجعة، وبعد موافقته يظهر لك زر الدفع في صفحة "بوابة الطالب" لإتمام السداد وتأكيد الحجز.'
+                : 'No charge now. Your request goes to the teacher; once approved, a Pay button appears in your Student Portal.'}
+            </div>
+            {submitError && <div className="text-sm text-rose-500 font-bold">{submitError}</div>}
+
             {/* Price Preview & Proceed */}
             <div className="pt-4 border-t border-slate-200 dark:border-white/10 flex items-center justify-between">
               <div>
                 <span className="text-xs text-slate-500 block">
-                  {lang === 'ar' ? 'رسوم الحجز المطلوب سدادها:' : 'Total Booking Fee:'}
+                  {lang === 'ar' ? 'الرسوم (تُدفع بعد موافقة المدرس):' : 'Total Booking Fee:'}
                 </span>
                 <span className="text-2xl font-black text-slate-900 dark:text-white">
                   {price} <span className="text-xs text-cyan-500 font-bold">ر.س</span>
@@ -488,166 +487,14 @@ export const BookingModal: React.FC = () => {
 
               <button
                 type="submit"
+                disabled={isProcessing}
                 className="px-6 py-3 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 shadow-lg shadow-cyan-500/25 flex items-center gap-2 cursor-pointer transition active:scale-95"
               >
-                <span>{lang === 'ar' ? 'الانتقال لصفحة السداد الإلكتروني' : 'Proceed to Payment'}</span>
-                <CreditCard className="size-4" />
+                <span>{isProcessing ? (lang === 'ar' ? 'جاري الإرسال...' : 'Sending...') : (lang === 'ar' ? 'إرسال طلب الحجز للمدرس' : 'Send booking request')}</span>
+                <CheckCircle2 className="size-4" />
               </button>
             </div>
           </form>
-        )}
-
-        {/* Step 2: Dedicated Payment Gateway Screen */}
-        {step === 'payment' && (
-          <div className="space-y-6">
-            {/* Booking Summary Box */}
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 space-y-2 text-xs">
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500">{lang === 'ar' ? 'اسم الطالب:' : 'Student:'}</span>
-                <span className="font-bold">{name} ({selectedCountry.nameAr})</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500">{lang === 'ar' ? 'المادة المحددة:' : 'Course:'}</span>
-                <span className="font-bold text-cyan-600 dark:text-cyan-400">{track}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-slate-500">{lang === 'ar' ? 'الموعد المختار:' : 'Schedule:'}</span>
-                <span className="font-bold font-mono">{dayNameStr} • {fullSelectedDate} • {selectedTimeSlot}</span>
-              </div>
-              <div className="pt-2 border-t border-slate-200 dark:border-white/10 flex justify-between items-center text-sm font-bold">
-                <span>{lang === 'ar' ? 'المبلغ الإجمالي للسداد:' : 'Total Due:'}</span>
-                <span className="text-xl font-black text-cyan-600 dark:text-cyan-400">{price} ر.س</span>
-              </div>
-            </div>
-
-            {/* Payment Method Selector */}
-            <div>
-              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-2.5">
-                {lang === 'ar' ? 'اختر بوابة الدفع المعتمدة:' : 'Select Payment Gateway:'}
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                {[
-                  { id: 'apple_pay', label: 'Apple Pay' },
-                  { id: 'mada', label: 'مدى (Mada)' },
-                  { id: 'stc_pay', label: 'STC Pay' },
-                  { id: 'visa', label: 'Visa / Mastercard' },
-                ].map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setPaymentMethod(m.id as any)}
-                    className={`p-3 rounded-2xl border text-center font-bold text-xs transition cursor-pointer flex flex-col items-center justify-center gap-1 ${
-                      paymentMethod === m.id
-                        ? 'border-cyan-500 bg-cyan-500/15 text-cyan-600 dark:text-cyan-400'
-                        : 'border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:border-slate-400'
-                    }`}
-                  >
-                    <CreditCard className="size-4" />
-                    <span>{m.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Interactive Card Form Inputs */}
-            {paymentMethod !== 'apple_pay' && paymentMethod !== 'stc_pay' && (
-              <div className="p-4 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 space-y-3">
-                <div>
-                  <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
-                    {lang === 'ar' ? 'رقم البطاقة' : 'Card Number'}
-                  </label>
-                  <input
-                    type="text"
-                    value={cardNumber}
-                    onChange={(e) => setCardNumber(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-[#0c1224] text-xs font-mono"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
-                      {lang === 'ar' ? 'تاريخ الانتهاء' : 'Expiry'}
-                    </label>
-                    <input
-                      type="text"
-                      value={cardExpiry}
-                      onChange={(e) => setCardExpiry(e.target.value)}
-                      className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-[#0c1224] text-xs font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1">
-                      CVV
-                    </label>
-                    <input
-                      type="password"
-                      maxLength={4}
-                      value={cardCvv}
-                      onChange={(e) => setCardCvv(e.target.value)}
-                      className="w-full p-2.5 rounded-xl border border-slate-300 dark:border-white/10 bg-white dark:bg-[#0c1224] text-xs font-mono"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {paymentMethod === 'apple_pay' && (
-              <div className="p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-900 text-white text-center space-y-2">
-                <div className="font-bold text-base"> Pay Instant Checkout</div>
-                <p className="text-xs text-slate-400">
-                  سيتم خصم {price} ر.س وتأكيد العملية بأمان عبر البصمة / Face ID.
-                </p>
-              </div>
-            )}
-
-            {paymentMethod === 'stc_pay' && (
-              <div className="p-5 rounded-2xl border border-purple-500/30 bg-purple-950/20 text-center space-y-2">
-                <div className="font-bold text-sm text-purple-400">STC Pay Express</div>
-                <p className="text-xs text-slate-300">
-                  أدخل رقم المحفظة {selectedCountry.dial} {phone} لاستلام رمز التأكيد OTP.
-                </p>
-              </div>
-            )}
-
-            <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-medium">
-              <ShieldCheck className="size-4 shrink-0" />
-              <span>
-                {lang === 'ar'
-                  ? 'بوابة دفع إلكترونية آمنة ومعتمدة من مؤسسة النقد العربي السعودي (ساما SAMA).'
-                  : 'Secure Electronic Payment Gateway compliant with SAMA standards.'}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-white/10">
-              <button
-                type="button"
-                onClick={() => setStep('details')}
-                className="px-4 py-2.5 rounded-xl border border-slate-300 dark:border-white/10 text-xs font-semibold text-slate-600 dark:text-slate-400 cursor-pointer"
-              >
-                {lang === 'ar' ? 'تعديل البيانات والموعد' : 'Back to Details'}
-              </button>
-
-              <button
-                type="button"
-                disabled={isProcessing}
-                onClick={handleProcessPayment}
-                className="px-8 py-3.5 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 shadow-lg shadow-emerald-500/25 flex items-center gap-2 cursor-pointer transition active:scale-95 disabled:opacity-50"
-              >
-                {isProcessing ? (
-                  <span>{lang === 'ar' ? 'جاري معالجة الدفع والتحقق...' : 'Processing Payment...'}</span>
-                ) : (
-                  <>
-                    <Lock className="size-4" />
-                    <span>
-                      {lang === 'ar'
-                        ? `سداد المبلغ (${price} ر.س) وإرسال الطلب`
-                        : `Pay Now (${price} SAR) & Submit`}
-                    </span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
         )}
 
         {/* Step 3: Submitted & Pending Approval Notice */}
@@ -659,7 +506,7 @@ export const BookingModal: React.FC = () => {
 
             <div>
               <h4 className="text-xl font-black text-slate-900 dark:text-white">
-                {lang === 'ar' ? 'تم استلام طلب الحجز والسداد بنجاح!' : 'Booking Request & Payment Received!'}
+                {lang === 'ar' ? 'تم إرسال طلب الحجز بنجاح!' : 'Booking Request & Payment Received!'}
               </h4>
               <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-1">
                 {lang === 'ar' ? 'رقم طلب الحجز المعتمد:' : 'Booking Ref:'}{' '}
@@ -676,8 +523,7 @@ export const BookingModal: React.FC = () => {
                 <span>حالة الحجز الحالية: قيد مراجعة واعتماد المهندس محمود شلتوت</span>
               </div>
               <p className="leading-relaxed">
-                تم تسجيل سدادك بنجاح، ووفقاً للسياسة التعليمية للمنصة، يقوم المدرس بمراجعة جدول المواعيد وقبول الحجز من داخل <strong>صفحة الإدارة</strong>.
-                فور القبول، سيتم تفعيل رابط الجلسة وإرسال إشعار تأكيد رسمي عبر واتساب والبريد الإلكتروني وتذكير قبل الحصة بـ 30 دقيقة.
+                الحجز <strong>غير مؤكد بعد</strong>. يراجع المدرس طلبك من لوحة الإدارة، وبعد الموافقة يظهر لك زر <strong>«ادفع الآن»</strong> في بوابة الطالب. يتم تأكيد الحجز وتفعيل رابط الجلسة فقط بعد إتمام الدفع.
               </p>
             </div>
 

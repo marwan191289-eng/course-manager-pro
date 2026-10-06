@@ -26,11 +26,12 @@ export interface Booking {
   date: string;
   timeSlot: string;
   platform: 'zoom' | 'meet';
-  status: 'pending' | 'confirmed' | 'rejected' | 'completed';
+  status: 'pending' | 'approved' | 'confirmed' | 'rejected' | 'completed';
+  weekday?: string;
   meetingUrl: string;
   price: number;
   paymentMethod: 'mada' | 'apple_pay' | 'visa' | 'stc_pay';
-  paymentStatus: 'paid' | 'pending';
+  paymentStatus: 'paid' | 'unpaid' | 'pending';
   country?: string;
   notes?: string;
   reminderSent: boolean;

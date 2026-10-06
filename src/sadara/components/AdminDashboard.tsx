@@ -238,7 +238,7 @@ export const AdminDashboard: React.FC = () => {
                 <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-slate-700 dark:text-slate-300">
                   {bookings.map((b) => (
                     <tr key={b.id} className="hover:bg-slate-50/50 dark:hover:bg-white/5">
-                      <td className="p-3.5 font-mono font-bold text-cyan-500">{b.id}</td>
+                      <td className="p-3.5 font-mono font-bold text-cyan-500">{b.id.slice(0, 8).toUpperCase()}</td>
                       <td className="p-3.5">
                         <div className="font-bold text-slate-900 dark:text-white">
                           {b.studentName}
@@ -249,13 +249,13 @@ export const AdminDashboard: React.FC = () => {
                       </td>
                       <td className="p-3.5">{b.courseOrTrack}</td>
                       <td className="p-3.5">
-                        <div>{b.date}</div>
+                        <div>{b.weekday ? `${b.weekday} • ` : ''}{b.date}</div>
                         <div className="text-[11px] text-cyan-500">{b.timeSlot}</div>
                       </td>
                       <td className="p-3.5 font-bold">
                         {b.price} ر.س{' '}
                         <span className="text-[10px] text-emerald-500 block">
-                          ({b.paymentStatus === 'paid' ? 'مسدد إلكترونياً' : 'معلق'})
+                          ({b.paymentStatus === 'paid' ? 'مسدد إلكترونياً' : 'غير مدفوع'})
                         </span>
                       </td>
                       <td className="p-3.5">
@@ -263,13 +263,17 @@ export const AdminDashboard: React.FC = () => {
                           className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${
                             b.status === 'confirmed'
                               ? 'bg-emerald-500/15 text-emerald-500'
+                              : b.status === 'approved'
+                              ? 'bg-cyan-500/15 text-cyan-500'
                               : b.status === 'pending'
                               ? 'bg-amber-500/15 text-amber-500'
                               : 'bg-rose-500/15 text-rose-500'
                           }`}
                         >
                           {b.status === 'confirmed'
-                            ? 'مقبول ومؤكد ✓'
+                            ? 'مؤكد ومدفوع ✓'
+                            : b.status === 'approved'
+                            ? 'مقبول — بانتظار الدفع'
                             : b.status === 'pending'
                             ? 'قيد مراجعة المدرس ⏳'
                             : 'مرفوض'}
@@ -277,9 +281,9 @@ export const AdminDashboard: React.FC = () => {
                       </td>
                       <td className="p-3.5">
                         <div className="flex items-center gap-1.5">
-                          {b.status !== 'confirmed' && (
+                          {b.status === 'pending' && (
                             <button
-                              onClick={() => updateBookingStatus(b.id, 'confirmed')}
+                              onClick={() => updateBookingStatus(b.id, 'approved')}
                               className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 cursor-pointer transition shadow-sm"
                               title="قبول واعتماد الحجز وإرسال الرابط"
                             >
@@ -287,7 +291,7 @@ export const AdminDashboard: React.FC = () => {
                               <span>قبول واعتماد</span>
                             </button>
                           )}
-                          {b.status !== 'rejected' && (
+                          {b.status !== 'rejected' && b.status !== 'confirmed' && (
                             <button
                               onClick={() => updateBookingStatus(b.id, 'rejected')}
                               className="p-1.5 rounded-lg bg-rose-500/15 text-rose-500 hover:bg-rose-500 hover:text-white transition cursor-pointer"
