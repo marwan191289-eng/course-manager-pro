@@ -1,7 +1,11 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { Language, Theme, UserRole, UserProfile, Booking, Question, TeacherRating, Article } from '../types';
 import { translations } from '../lib/i18n';
-import { INITIAL_BOOKINGS, QUESTIONS as DEFAULT_QUESTIONS, INITIAL_RATINGS } from '../data/mockData';
+import { supabase } from '@/integrations/supabase/client';
+import { lovable } from '@/integrations/lovable/index';
+import { computeStudentCount } from '../lib/studentCounter';
+
+type NewBooking = Omit<Booking, 'id' | 'createdAt' | 'status' | 'paymentStatus' | 'meetingUrl' | 'reminderSent' | 'paymentMethod'> & { weekday: string };
 
 interface AppContextType {
   lang: Language;
@@ -12,15 +16,21 @@ interface AppContextType {
   t: typeof translations.ar;
   userRole: UserRole;
   setUserRole: (role: UserRole) => void;
+  isAdmin: boolean;
+  authReady: boolean;
   user: UserProfile;
   setUser: React.Dispatch<React.SetStateAction<UserProfile>>;
   isLoggedIn: boolean;
   setIsLoggedIn: (val: boolean) => void;
-  socialLogin: (provider: string) => void;
+  socialLogin: (provider: string) => Promise<string | null>;
+  emailSignIn: (email: string, password: string) => Promise<string | null>;
+  emailSignUp: (name: string, email: string, password: string) => Promise<string | null>;
+  sendPasswordReset: (email: string) => Promise<string | null>;
   logout: () => void;
   bookings: Booking[];
-  addBooking: (booking: Omit<Booking, 'id' | 'createdAt'>) => Booking;
+  addBooking: (booking: NewBooking) => Promise<Booking | null>;
   updateBookingStatus: (id: string, status: Booking['status']) => void;
+  markBookingPaid: (id: string) => void;
   deleteBooking: (id: string) => void;
   answeredQuestions: Record<number, number>;
   submitAnswer: (questionId: number, optionIdx: number) => void;
@@ -55,107 +65,91 @@ interface AppContextType {
   addArticle: (art: Article) => void;
 }
 
-const defaultUser: UserProfile = {
-  id: 'usr-1447',
-  name: 'محمد بن عبد الله الشمري',
-  email: 'm.alshammari@gmail.com',
-  phone: '+966 59 123 4567',
+const guestUser: UserProfile = {
+  id: '',
+  name: '',
+  email: '',
+  phone: '',
   role: 'student',
-  avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-  enrolledCourses: ['course-1', 'course-2'],
-  completedLessons: ['l-1', 'l-2', 'l-3', 'l-4'],
-  testScores: [
-    { quizTitle: 'اختبار محاكاة القدرات الكمي الأول', score: 96, total: 100, date: '2026-10-02' },
-    { quizTitle: 'اختبار الكيمياء النووية والتحصيلي', score: 98, total: 100, date: '2026-10-04' },
-    { quizTitle: 'التناظر اللفظي واستيعاب المقروء', score: 94, total: 100, date: '2026-10-05' },
-  ],
-  badges: ['خبير القدرات الذهبي', 'مهندس التفاعلات النووية', 'حاصد الـ +95', 'سفير صدارة المتميز'],
-  twoFactorEnabled: true,
-  activeDevicesCount: 2,
+  avatar: '',
+  enrolledCourses: [],
+  completedLessons: [],
+  testScores: [],
+  badges: [],
+  twoFactorEnabled: false,
+  activeDevicesCount: 1,
 };
 
-const INITIAL_ARTICLES: Article[] = [
-  {
-    id: 'art-1',
-    title: 'خريطة التفوق في قدرات 1447: كيف تبدأ المذاكرة بدون تشتت؟',
-    titleEn: 'Roadmap to Excellence in Qudrat 1447: How to Study Without Distraction',
-    category: 'قدرات عامة',
-    readTime: '5 دقائق',
-    date: '2026-10-01',
-    views: 3420,
-    summary: 'خطوات عملية لتقسيم وقت المذاكرة وإتقان القوانين الذهبية للجزء الكمي واستيعاب المقروء.',
-    summaryEn: 'Practical steps to organize your study schedule and master the golden rules for quantitative and verbal sections.',
-    content: 'المذاكرة الذكية تبدأ بالتشخيص الدقيق لنقاط الضعف واستخدام استراتيجيات الحل السريع بدلاً من الحل التقليدي المطول...',
-  },
-  {
-    id: 'art-2',
-    title: 'أسرار الكيمياء النووية في اختبار التحصيلي: موازنة الانشطار وحساب النيوترونات',
-    titleEn: 'Secrets of Nuclear Chemistry in Tahsili: Fission Balancing & Neutron Flux',
-    category: 'تحصيلي علمي',
-    readTime: '7 دقائق',
-    date: '2026-10-03',
-    views: 2890,
-    summary: 'شرح مبسط لقوانين حفظ العدد الكتلي والذري وتطبيقات إشعاع شيرينكوف وقضبان التحكم.',
-    summaryEn: 'Intuitive breakdown of mass and atomic number conservation laws, Cherenkov radiation, and control rods.',
-    content: 'في التفاعلات النووية، مجموع الأعداد الكتلية ومجموع الأعداد الذرية في المتفاعلات يساوي النواتج دوماً...',
-  },
-];
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const mapBooking = (r: any): Booking => ({
+  id: r.id,
+  studentName: r.student_name,
+  studentPhone: r.student_phone,
+  studentEmail: r.student_email,
+  courseOrTrack: r.course_or_track,
+  date: r.booking_date,
+  weekday: r.weekday,
+  timeSlot: r.time_slot,
+  platform: r.platform,
+  status: r.status,
+  meetingUrl: r.meeting_url ?? '',
+  price: r.price,
+  paymentMethod: 'visa',
+  paymentStatus: r.payment_status,
+  country: r.country ?? undefined,
+  notes: r.notes ?? undefined,
+  reminderSent: false,
+  createdAt: r.created_at,
+});
+
+const mapRating = (r: any): TeacherRating => ({
+  id: r.id,
+  studentName: r.student_name,
+  sessionTitle: r.session_title,
+  rating: r.rating,
+  clarity: r.clarity,
+  timeManagement: r.time_management,
+  problemSolving: r.problem_solving,
+  comment: r.comment,
+  date: new Date(r.created_at).toLocaleDateString('ar-SA'),
+  status: r.status,
+});
+
+const mapArticle = (r: any): Article => ({
+  id: r.id,
+  title: r.title,
+  titleEn: r.title_en,
+  category: r.category,
+  readTime: r.read_time,
+  date: String(r.created_at).slice(0, 10),
+  views: r.views,
+  summary: r.summary,
+  summaryEn: r.summary_en,
+  content: r.content,
+});
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [lang, setLangState] = useState<Language>(() => {
-    return (localStorage.getItem('sadara_lang') as Language) || 'ar';
-  });
-
-  const [theme, setThemeState] = useState<Theme>(() => {
-    return (localStorage.getItem('sadara_theme') as Theme) || 'dark';
-  });
+  const [lang, setLangState] = useState<Language>(() => (localStorage.getItem('sadara_lang') as Language) || 'ar');
+  const [theme, setThemeState] = useState<Theme>(() => (localStorage.getItem('sadara_theme') as Theme) || 'dark');
 
   const [userRole, setUserRole] = useState<UserRole>('student');
-  const [user, setUser] = useState<UserProfile>(defaultUser);
-  const [isLoggedIn, setIsLoggedIn] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+  const [user, setUser] = useState<UserProfile>(guestUser);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  // Dynamic realistic student count timer
-  const [studentCount, setStudentCount] = useState<number>(() => {
-    // Rational timer based on real hours: roughly +1 every hour, +3 every 2 hours
-    const epochRef = 1760000000000;
-    const hoursElapsed = Math.max(0, Math.floor((Date.now() - epochRef) / (1000 * 60 * 60)));
-    // Pattern: 1, 2, 1, 3, 1, 2...
-    let rationalGrowth = 0;
-    for (let h = 0; h < (hoursElapsed % 500); h++) {
-      rationalGrowth += (h % 3 === 0 ? 2 : (h % 5 === 0 ? 3 : 1));
-    }
-    return 12419 + (rationalGrowth % 120);
-  });
-
+  const [studentCount, setStudentCount] = useState<number>(() => computeStudentCount(Date.now()));
   useEffect(() => {
-    // Subtle real-time increment every 60 seconds
-    const interval = setInterval(() => {
-      setStudentCount((prev) => prev + 1);
-    }, 60000);
-    return () => clearInterval(interval);
+    const i = setInterval(() => setStudentCount(computeStudentCount(Date.now())), 60_000);
+    return () => clearInterval(i);
   }, []);
 
-  const [bookings, setBookings] = useState<Booking[]>(() => {
-    const saved = localStorage.getItem('sadara_bookings');
-    return saved ? JSON.parse(saved) : INITIAL_BOOKINGS;
-  });
-
-  const [ratings, setRatings] = useState<TeacherRating[]>(() => {
-    const saved = localStorage.getItem('sadara_ratings');
-    return saved ? JSON.parse(saved) : INITIAL_RATINGS;
-  });
-
-  const [questions, setQuestions] = useState<Question[]>(() => {
-    const saved = localStorage.getItem('sadara_questions');
-    return saved ? JSON.parse(saved) : DEFAULT_QUESTIONS;
-  });
-
-  const [articles, setArticles] = useState<Article[]>(() => {
-    const saved = localStorage.getItem('sadara_articles');
-    return saved ? JSON.parse(saved) : INITIAL_ARTICLES;
-  });
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [ratings, setRatings] = useState<TeacherRating[]>([]);
+  const [questions, setQuestions] = useState<(Question & { dbId?: string })[]>([]);
+  const [articles, setArticles] = useState<Article[]>([]);
 
   const [answeredQuestions, setAnsweredQuestions] = useState<Record<number, number>>({});
   const [activeTab, setActiveTab] = useState<string>('home');
@@ -164,296 +158,323 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isCertificateModalOpen, setIsCertificateModalOpen] = useState(false);
   const [certificateCourse, setCertificateCourse] = useState('برنامج التميز في القدرات والتحصيلي والكيمياء النووية');
-
-  const [notifications, setNotifications] = useState<Array<{ id: string; title: string; message: string; time: string; type: string }>>([
-    {
-      id: 'notif-1',
-      title: 'مرحباً بك في منصة صدارة!',
-      message: 'تم تفعيل حسابك بنجاح بإشراف المهندس محمود إسماعيل شلتوت.',
-      time: 'الآن',
-      type: 'system',
-    },
-    {
-      id: 'notif-2',
-      title: 'جلسة قادمة غداً',
-      message: 'تذكير: لديك جلسة قدرات كمي في تمام الساعة 7:00 م عبر Zoom.',
-      time: 'منذ ساعة',
-      type: 'booking',
-    },
-  ]);
+  const [notifications, setNotifications] = useState<AppContextType['notifications']>([]);
 
   const addNotification = (title: string, message: string, type: string = 'system') => {
-    const newNotif = {
-      id: 'notif-' + Date.now(),
-      title,
-      message,
-      time: 'الآن',
-      type,
+    setNotifications((prev) => [{ id: 'n-' + Date.now() + Math.random(), title, message, time: 'الآن', type }, ...prev].slice(0, 20));
+  };
+  const dismissNotification = (id: string) => setNotifications((prev) => prev.filter((n) => n.id !== id));
+
+  // ---------- Data loading ----------
+  const loadPublic = useCallback(async () => {
+    const [{ data: q }, { data: a }, { data: r }] = await Promise.all([
+      supabase.from('questions').select('*').order('created_at'),
+      supabase.from('articles').select('*').order('created_at', { ascending: false }),
+      supabase.from('ratings').select('*').order('created_at', { ascending: false }),
+    ]);
+    setQuestions((q ?? []).map((row: any) => ({ ...(row.data as Question), dbId: row.id })));
+    setArticles((a ?? []).map(mapArticle));
+    setRatings((r ?? []).map(mapRating));
+  }, []);
+
+  const loadBookings = useCallback(async () => {
+    const { data } = await supabase.from('bookings').select('*').order('created_at', { ascending: false });
+    setBookings((data ?? []).map(mapBooking));
+  }, []);
+
+  const applySession = useCallback(
+    async (sessionUser: { id: string; email?: string; user_metadata?: any } | null) => {
+      if (!sessionUser) {
+        setIsLoggedIn(false);
+        setIsAdmin(false);
+        setUser(guestUser);
+        setBookings([]);
+        setAuthReady(true);
+        loadPublic();
+        return;
+      }
+      setIsLoggedIn(true);
+      const meta = sessionUser.user_metadata ?? {};
+      const [{ data: profile }, { data: roles }] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', sessionUser.id).maybeSingle(),
+        supabase.from('user_roles').select('role').eq('user_id', sessionUser.id),
+      ]);
+      const admin = (roles ?? []).some((r: any) => r.role === 'admin');
+      setIsAdmin(admin);
+      setUserRole(admin ? 'admin' : 'student');
+      setUser({
+        ...guestUser,
+        id: sessionUser.id,
+        name: profile?.full_name || meta.full_name || meta.name || (sessionUser.email ?? '').split('@')[0],
+        email: sessionUser.email ?? '',
+        phone: profile?.phone ?? '',
+        avatar:
+          profile?.avatar_url ||
+          meta.avatar_url ||
+          `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(sessionUser.email ?? 'S')}`,
+        role: admin ? 'admin' : 'student',
+        enrolledCourses: ['course-1'],
+      });
+      setAuthReady(true);
+      loadBookings();
+      loadPublic();
+    },
+    [loadBookings, loadPublic],
+  );
+
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
+        setTimeout(() => applySession(session?.user ?? null), 0);
+      }
+    });
+    supabase.auth.getUser().then(({ data }) => applySession(data.user ?? null));
+    return () => sub.subscription.unsubscribe();
+  }, [applySession]);
+
+  // Realtime refresh of bookings so students see teacher approvals instantly
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const ch = supabase
+      .channel('bookings-' + user.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bookings' }, () => loadBookings())
+      .subscribe();
+    return () => {
+      supabase.removeChannel(ch);
     };
-    setNotifications((prev) => [newNotif, ...prev]);
-  };
+  }, [isLoggedIn, user.id, loadBookings]);
 
-  const dismissNotification = (id: string) => {
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  // ---------- Lang & theme ----------
+  const setLang = (l: Language) => {
+    setLangState(l);
+    localStorage.setItem('sadara_lang', l);
   };
-
-  // Sync Language and Direction
-  const setLang = (newLang: Language) => {
-    setLangState(newLang);
-    localStorage.setItem('sadara_lang', newLang);
-  };
-
   useEffect(() => {
     document.documentElement.lang = lang;
     document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
   }, [lang]);
 
-  // Sync Theme
-  const setTheme = (newTheme: Theme) => {
-    setThemeState(newTheme);
-    localStorage.setItem('sadara_theme', newTheme);
+  const setTheme = (th: Theme) => {
+    setThemeState(th);
+    localStorage.setItem('sadara_theme', th);
   };
-
-  const toggleTheme = () => {
-    const nextTheme = theme === 'dark' ? 'light' : 'dark';
-    setTheme(nextTheme);
-  };
-
+  const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark');
   useEffect(() => {
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-      document.documentElement.classList.remove('light');
-      document.body.classList.add('dark');
-      document.body.classList.remove('light');
-      document.documentElement.setAttribute('data-theme', 'dark');
-      document.documentElement.style.colorScheme = 'dark';
-    } else {
-      document.documentElement.classList.remove('dark');
-      document.documentElement.classList.add('light');
-      document.body.classList.remove('dark');
-      document.body.classList.add('light');
-      document.documentElement.setAttribute('data-theme', 'light');
-      document.documentElement.style.colorScheme = 'light';
-    }
+    const root = document.documentElement;
+    root.classList.toggle('dark', theme === 'dark');
+    root.classList.toggle('light', theme !== 'dark');
+    root.style.colorScheme = theme;
   }, [theme]);
 
-  // Save Bookings, Ratings, Questions, Articles to localStorage
-  useEffect(() => {
-    localStorage.setItem('sadara_bookings', JSON.stringify(bookings));
-  }, [bookings]);
-
-  useEffect(() => {
-    localStorage.setItem('sadara_ratings', JSON.stringify(ratings));
-  }, [ratings]);
-
-  useEffect(() => {
-    localStorage.setItem('sadara_questions', JSON.stringify(questions));
-  }, [questions]);
-
-  useEffect(() => {
-    localStorage.setItem('sadara_articles', JSON.stringify(articles));
-  }, [articles]);
-
-  const addBooking = (bookingData: Omit<Booking, 'id' | 'createdAt'>): Booking => {
-    const newBooking: Booking = {
-      ...bookingData,
-      id: 'BK-' + Math.floor(1000 + Math.random() * 9000),
-      createdAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
-      status: 'pending', // Pending teacher approval from Admin panel!
+  // ---------- Auth ----------
+  const socialLogin = async (provider: string) => {
+    const map: Record<string, 'google' | 'apple' | 'microsoft'> = {
+      google: 'google',
+      icloud: 'apple',
+      apple: 'apple',
+      microsoft: 'microsoft',
     };
-
-    setBookings((prev) => [newBooking, ...prev]);
-
-    addNotification(
-      'طلب حجز جديد قيد الاعتماد',
-      `تم إرسال طلب الحجز برقم ${newBooking.id} وهو بانتظار موافقة واعتماد المهندس محمود شلتوت.`,
-      'booking'
-    );
-
-    return newBooking;
+    const p = map[provider];
+    if (!p) return 'unsupported';
+    const result = await lovable.auth.signInWithOAuth(p, { redirect_uri: window.location.origin });
+    if (result.error) return result.error.message ?? String(result.error);
+    if (!result.redirected) setIsAuthModalOpen(false);
+    return null;
   };
 
-  const updateBookingStatus = (id: string, status: Booking['status']) => {
-    setBookings((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, status } : b))
-    );
-    addNotification(
-      'تحديث حالة الحجز',
-      status === 'confirmed'
-        ? `تم قبول واعتماد الحجز ${id} بنجاح وإرسال رابط الجلسة وإشعار الواتساب للطالب.`
-        : `تم تحديث حالة الحجز ${id} إلى ${status === 'rejected' ? 'مرفوض' : status}.`,
-      'booking'
-    );
+  const emailSignIn = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return error.message;
+    setIsAuthModalOpen(false);
+    addNotification('تسجيل الدخول', 'مرحباً بعودتك إلى منصة صدارة.');
+    return null;
   };
 
-  const deleteBooking = (id: string) => {
-    setBookings((prev) => prev.filter((b) => b.id !== id));
-    addNotification('إلغاء حجز', `تم حذف الحجز ${id} من السجل.`);
+  const emailSignUp = async (name: string, email: string, password: string) => {
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: window.location.origin, data: { full_name: name } },
+    });
+    return error ? error.message : null;
   };
 
-  // Ratings management
-  const addRating = (ratingData: Omit<TeacherRating, 'id' | 'status' | 'date'>) => {
-    const newRating: TeacherRating = {
-      ...ratingData,
-      id: 'r-' + Date.now(),
-      status: 'pending', // Requires teacher approval!
-      date: 'اليوم',
-    };
-    setRatings((prev) => [newRating, ...prev]);
-    addNotification(
-      'تم إرسال التقييم بنجاح',
-      'شكراً لك! سيظهر تقييمك على المنصة فور مراجعته واعتماده من المدرس.'
-    );
+  const sendPasswordReset = async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    return error ? error.message : null;
   };
 
-  const approveRating = (id: string) => {
-    setRatings((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, status: 'approved' } : r))
-    );
-    addNotification('اعتماد تقييم', 'تمت الموافقة على نشر التقييم على الصفحة الرئيسية وصفحة المدرس.');
-  };
-
-  const deleteRating = (id: string) => {
-    setRatings((prev) => prev.filter((r) => r.id !== id));
-    addNotification('حذف تقييم', 'تم حذف التقييم بنجاح.');
-  };
-
-  // Question bank management
-  const deleteQuestion = (id: number) => {
-    setQuestions((prev) => prev.filter((q) => q.id !== id));
-    addNotification('حذف سؤال', 'تم حذف السؤال من بنك الأسئلة.');
-  };
-
-  const addQuestion = (newQ: Question) => {
-    setQuestions((prev) => [newQ, ...prev]);
-    addNotification('إضافة سؤال', 'تمت إضافة السؤال بنجاح لبنك الأسئلة.');
-  };
-
-  // Article management
-  const deleteArticle = (id: string) => {
-    setArticles((prev) => prev.filter((a) => a.id !== id));
-    addNotification('حذف مقال', 'تم حذف المقال التعليمي من المنصة.');
-  };
-
-  const addArticle = (newArt: Article) => {
-    setArticles((prev) => [newArt, ...prev]);
-    addNotification('نشر مقال', 'تم نشر المقال التعليمي بنجاح.');
-  };
-
-  // Social Login Provider simulation
-  const socialLogin = (provider: string) => {
-    let providerName = provider;
-    let avatarUrl = defaultUser.avatar;
-
-    if (provider === 'icloud') {
-      providerName = 'Apple ID User';
-      avatarUrl = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80';
-    } else if (provider === 'google') {
-      providerName = 'Google Scholar User';
-      avatarUrl = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80';
-    } else if (provider === 'linkedin') {
-      providerName = 'Professional Achiever';
-      avatarUrl = 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80';
-    }
-
-    setUser((prev) => ({
-      ...prev,
-      name: providerName,
-      email: `${provider.toLowerCase()}.user@sadara.sa`,
-      badges: [...prev.badges, `موثق عبر ${provider}`],
-    }));
-    setIsLoggedIn(true);
-    addNotification('تسجيل الدخول', `تم تسجيل الدخول بنجاح عبر حساب ${provider}.`);
-  };
-
-  const logout = () => {
-    setIsLoggedIn(false);
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setActiveTab('home');
     addNotification('تسجيل الخروج', 'تم تسجيل خروجك بأمان من المنصة.');
   };
 
-  const submitAnswer = (questionId: number, optionIdx: number) => {
-    setAnsweredQuestions((prev) => ({
-      ...prev,
-      [questionId]: optionIdx,
-    }));
+  // ---------- Bookings ----------
+  const addBooking = async (b: NewBooking) => {
+    if (!isLoggedIn) {
+      setIsAuthModalOpen(true);
+      return null;
+    }
+    const { data, error } = await supabase
+      .from('bookings')
+      .insert({
+        user_id: user.id,
+        student_name: b.studentName,
+        student_phone: b.studentPhone,
+        student_email: b.studentEmail,
+        country: b.country ?? null,
+        course_or_track: b.courseOrTrack,
+        booking_date: b.date,
+        weekday: b.weekday,
+        time_slot: b.timeSlot,
+        platform: b.platform,
+        price: b.price,
+        notes: b.notes ?? null,
+      })
+      .select()
+      .single();
+    if (error || !data) {
+      addNotification('تعذر إرسال الحجز', error?.message ?? 'حاول مرة أخرى', 'error');
+      return null;
+    }
+    const nb = mapBooking(data);
+    setBookings((prev) => [nb, ...prev]);
+    return nb;
   };
 
-  const resetQuizProgress = () => {
-    setAnsweredQuestions({});
+  const updateBookingStatus = async (id: string, status: Booking['status']) => {
+    const patch: Record<string, string> = { status, updated_at: new Date().toISOString() };
+    const { error } = await supabase.from('bookings').update(patch).eq('id', id);
+    if (error) return addNotification('خطأ', error.message, 'error');
+    loadBookings();
+    addNotification(
+      'تحديث الحجز',
+      status === 'approved' ? 'تم قبول الحجز — يمكن للطالب الآن إتمام الدفع.' : 'تم تحديث حالة الحجز.',
+    );
   };
+
+  const markBookingPaid = async (id: string) => {
+    const b = bookings.find((x) => x.id === id);
+    const meeting =
+      b?.platform === 'meet' ? 'https://meet.google.com/' : 'https://zoom.us/';
+    const { error } = await supabase
+      .from('bookings')
+      .update({ payment_status: 'paid', status: 'confirmed', meeting_url: b?.meetingUrl || meeting })
+      .eq('id', id);
+    if (error) return addNotification('خطأ', error.message, 'error');
+    loadBookings();
+  };
+
+  const deleteBooking = async (id: string) => {
+    const { error } = await supabase.from('bookings').delete().eq('id', id);
+    if (error) return addNotification('خطأ', error.message, 'error');
+    setBookings((prev) => prev.filter((b) => b.id !== id));
+  };
+
+  // ---------- Ratings ----------
+  const addRating = async (r: Omit<TeacherRating, 'id' | 'status' | 'date'>) => {
+    if (!isLoggedIn) {
+      setIsAuthModalOpen(true);
+      return;
+    }
+    const { error } = await supabase.from('ratings').insert({
+      user_id: user.id,
+      student_name: r.studentName || user.name,
+      session_title: r.sessionTitle,
+      rating: r.rating,
+      clarity: r.clarity,
+      time_management: r.timeManagement,
+      problem_solving: r.problemSolving,
+      comment: r.comment,
+    });
+    if (error) return addNotification('خطأ', error.message, 'error');
+    addNotification('تم إرسال التقييم', 'سيظهر تقييمك على المنصة فور اعتماده من المدرس.');
+    loadPublic();
+  };
+  const approveRating = async (id: string) => {
+    await supabase.from('ratings').update({ status: 'approved' }).eq('id', id);
+    loadPublic();
+  };
+  const deleteRating = async (id: string) => {
+    await supabase.from('ratings').delete().eq('id', id);
+    setRatings((prev) => prev.filter((r) => r.id !== id));
+  };
+
+  // ---------- Questions & Articles ----------
+  const deleteQuestion = async (id: number) => {
+    const q = questions.find((x) => x.id === id);
+    if (!q?.dbId) return;
+    await supabase.from('questions').delete().eq('id', q.dbId);
+    setQuestions((prev) => prev.filter((x) => x.id !== id));
+  };
+  const addQuestion = async (q: Question) => {
+    const { error } = await supabase.from('questions').insert({ data: q as any });
+    if (error) return addNotification('خطأ', error.message, 'error');
+    loadPublic();
+  };
+  const deleteArticle = async (id: string) => {
+    await supabase.from('articles').delete().eq('id', id);
+    setArticles((prev) => prev.filter((a) => a.id !== id));
+  };
+  const addArticle = async (a: Article) => {
+    const { error } = await supabase.from('articles').insert({
+      title: a.title,
+      title_en: a.titleEn,
+      category: a.category,
+      read_time: a.readTime,
+      summary: a.summary,
+      summary_en: a.summaryEn,
+      content: a.content,
+    });
+    if (error) return addNotification('خطأ', error.message, 'error');
+    loadPublic();
+  };
+
+  const submitAnswer = (questionId: number, optionIdx: number) =>
+    setAnsweredQuestions((prev) => ({ ...prev, [questionId]: optionIdx }));
+  const resetQuizProgress = () => setAnsweredQuestions({});
 
   const openBookingModal = (course?: string) => {
     setSelectedCourseForBooking(course);
+    if (!isLoggedIn) {
+      setIsAuthModalOpen(true);
+      addNotification('سجّل الدخول أولاً', 'يرجى تسجيل الدخول أو إنشاء حساب لإتمام الحجز.');
+      return;
+    }
     setIsBookingModalOpen(true);
   };
-
-  const closeBookingModal = () => {
-    setIsBookingModalOpen(false);
-  };
-
-  const openAuthModal = () => setIsAuthModalOpen(true);
-  const closeAuthModal = () => setIsAuthModalOpen(false);
-
-  const openCertificateModal = (courseName?: string) => {
-    if (courseName) setCertificateCourse(courseName);
-    setIsCertificateModalOpen(true);
-  };
-  const closeCertificateModal = () => setIsCertificateModalOpen(false);
 
   const t = translations[lang];
 
   return (
     <AppContext.Provider
       value={{
-        lang,
-        setLang,
-        theme,
-        setTheme,
-        toggleTheme,
-        t,
-        userRole,
-        setUserRole,
-        user,
-        setUser,
-        isLoggedIn,
-        setIsLoggedIn,
-        socialLogin,
-        logout,
-        bookings,
-        addBooking,
-        updateBookingStatus,
-        deleteBooking,
-        answeredQuestions,
-        submitAnswer,
-        resetQuizProgress,
-        activeTab,
-        setActiveTab,
-        openBookingModal,
-        closeBookingModal,
-        isBookingModalOpen,
-        selectedCourseForBooking,
-        openAuthModal,
-        closeAuthModal,
+        lang, setLang, theme, setTheme, toggleTheme, t,
+        userRole, setUserRole, isAdmin, authReady,
+        user, setUser, isLoggedIn, setIsLoggedIn,
+        socialLogin, emailSignIn, emailSignUp, sendPasswordReset, logout,
+        bookings, addBooking, updateBookingStatus, markBookingPaid, deleteBooking,
+        answeredQuestions, submitAnswer, resetQuizProgress,
+        activeTab, setActiveTab,
+        openBookingModal, closeBookingModal: () => setIsBookingModalOpen(false),
+        isBookingModalOpen, selectedCourseForBooking,
+        openAuthModal: () => setIsAuthModalOpen(true),
+        closeAuthModal: () => setIsAuthModalOpen(false),
         isAuthModalOpen,
-        openCertificateModal,
-        closeCertificateModal,
-        isCertificateModalOpen,
-        certificateCourse,
-        notifications,
-        addNotification,
-        dismissNotification,
-        studentCount,
-        formattedStudentCount: `+${studentCount.toLocaleString()}`,
-        ratings,
-        addRating,
-        approveRating,
-        deleteRating,
-        questions,
-        deleteQuestion,
-        addQuestion,
-        articles,
-        deleteArticle,
-        addArticle,
+        openCertificateModal: (c?: string) => {
+          if (c) setCertificateCourse(c);
+          setIsCertificateModalOpen(true);
+        },
+        closeCertificateModal: () => setIsCertificateModalOpen(false),
+        isCertificateModalOpen, certificateCourse,
+        notifications, addNotification, dismissNotification,
+        studentCount, formattedStudentCount: `+${studentCount.toLocaleString('en-US')}`,
+        ratings, addRating, approveRating, deleteRating,
+        questions, deleteQuestion, addQuestion,
+        articles, deleteArticle, addArticle,
       }}
     >
       {children}
