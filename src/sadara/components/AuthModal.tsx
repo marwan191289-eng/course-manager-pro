@@ -1,476 +1,161 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { INITIAL_LOGIN_ACTIVITIES, SITE_INFO } from '../data/mockData';
-import {
-  X,
-  Mail,
-  Lock,
-  Phone,
-  Shield,
-  Smartphone,
-  CheckCircle2,
-  AlertTriangle,
-  LogOut,
-  RefreshCw,
-  Key,
-  Globe,
-  Apple,
-} from 'lucide-react';
+import { X, Mail, Lock, User, Loader2, ShieldCheck } from 'lucide-react';
+
+type Mode = 'login' | 'register' | 'reset';
+
+const GoogleIcon = () => (
+  <svg viewBox="0 0 24 24" className="size-5" aria-hidden>
+    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z" />
+    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z" />
+    <path fill="#FBBC05" d="M5.84 14.1A6.6 6.6 0 0 1 5.5 12c0-.73.13-1.44.34-2.1V7.06H2.18A11 11 0 0 0 1 12c0 1.77.42 3.45 1.18 4.94l3.66-2.84z" />
+    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15A10.56 10.56 0 0 0 12 1 11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z" />
+  </svg>
+);
+const AppleIcon = () => (
+  <svg viewBox="0 0 24 24" className="size-5 fill-current" aria-hidden>
+    <path d="M16.37 1.43c0 1.14-.42 2.2-1.12 2.98-.84.93-2.2 1.65-3.3 1.56-.14-1.1.42-2.27 1.1-3 .77-.85 2.1-1.48 3.32-1.54zM20.5 17.1c-.56 1.3-.83 1.88-1.55 3.03-1 1.6-2.43 3.6-4.19 3.62-1.56.01-1.96-1.02-4.08-1-2.12.01-2.56 1.02-4.12 1-1.76-.02-3.1-1.82-4.11-3.42C-.37 15.86-.67 10.58 1.15 7.8c1.29-1.98 3.33-3.14 5.25-3.14 1.95 0 3.18 1.07 4.8 1.07 1.56 0 2.52-1.07 4.77-1.07 1.7 0 3.5.93 4.79 2.53-4.21 2.31-3.53 8.32-.26 9.91z" />
+  </svg>
+);
+const MicrosoftIcon = () => (
+  <svg viewBox="0 0 24 24" className="size-5" aria-hidden>
+    <path fill="#F25022" d="M1 1h10.5v10.5H1z" />
+    <path fill="#7FBA00" d="M12.5 1H23v10.5H12.5z" />
+    <path fill="#00A4EF" d="M1 12.5h10.5V23H1z" />
+    <path fill="#FFB900" d="M12.5 12.5H23V23H12.5z" />
+  </svg>
+);
 
 export const AuthModal: React.FC = () => {
-  const { isAuthModalOpen, closeAuthModal, user, setUser, addNotification, socialLogin } = useApp();
-
-  const [mode, setMode] = useState<'login' | 'register' | 'forgot' | 'security'>('login');
-  const [email, setEmail] = useState('m.alshammari@gmail.com');
-  const [password, setPassword] = useState('••••••••••');
-  const [phone, setPhone] = useState('+966 59 123 4567');
-  const [recoveryChannel, setRecoveryChannel] = useState<'email' | 'sms' | 'whatsapp'>('whatsapp');
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(user.twoFactorEnabled);
-  const [recoverySent, setRecoverySent] = useState(false);
-  const [loginActivities, setLoginActivities] = useState(INITIAL_LOGIN_ACTIVITIES);
+  const { isAuthModalOpen, closeAuthModal, emailSignIn, emailSignUp, sendPasswordReset, socialLogin, lang } = useApp();
+  const ar = lang === 'ar';
+  const [mode, setMode] = useState<Mode>('login');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
 
   if (!isAuthModalOpen) return null;
 
-  const handleLogoutAllDevices = () => {
-    setLoginActivities([
-      {
-        id: 'act-' + Date.now(),
-        device: 'الجهاز الحالي فقط (Session Secured)',
-        browser: 'Current Browser',
-        ip: '188.52.140.21',
-        location: 'الرياض، المملكة العربية السعودية',
-        timestamp: 'الآن',
-        status: 'normal',
-      },
-    ]);
-    addNotification('الأمان والحساب', 'تم تسجيل الخروج فوراً من كافة الأجهزة الأخرى المرتبطة بحسابك.');
-  };
-
-  const handleToggle2FA = () => {
-    const updated = !twoFactorEnabled;
-    setTwoFactorEnabled(updated);
-    setUser((prev) => ({ ...prev, twoFactorEnabled: updated }));
-    addNotification(
-      'المصادقة الثنائية (2FA)',
-      updated
-        ? 'تم تفعيل المصادقة الثنائية 2FA عبر رمز التحقق.'
-        : 'تم تعطيل المصادقة الثنائية.'
-    );
-  };
-
-  const handleSendRecovery = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setRecoverySent(true);
-    addNotification(
-      'استعادة كلمة المرور',
-      `تم إرسال رابط إعادة تعيين كلمة المرور عبر ${
-        recoveryChannel === 'whatsapp'
-          ? 'واتساب (+966 59 475 6878)'
-          : recoveryChannel === 'sms'
-          ? 'رسالة نصية قصيرة SMS'
-          : 'البريد الإلكتروني'
-      }.`
-    );
+    setError('');
+    setInfo('');
+    setBusy(true);
+    let err: string | null = null;
+    if (mode === 'login') err = await emailSignIn(email, password);
+    else if (mode === 'register') {
+      err = await emailSignUp(name, email, password);
+      if (!err) setInfo(ar ? 'تم إنشاء الحساب! تحقق من بريدك الإلكتروني واضغط رابط التفعيل ثم سجّل الدخول.' : 'Account created! Check your email to confirm, then sign in.');
+    } else {
+      err = await sendPasswordReset(email);
+      if (!err) setInfo(ar ? 'أرسلنا رابط إعادة تعيين كلمة المرور إلى بريدك.' : 'Password reset link sent to your email.');
+    }
+    setBusy(false);
+    if (err) setError(err === 'Invalid login credentials' ? (ar ? 'البريد أو كلمة المرور غير صحيحة' : err) : err);
   };
+
+  const social = async (p: string) => {
+    setError('');
+    const err = await socialLogin(p);
+    if (err) setError(err);
+  };
+
+  const input = 'sadara-input w-full ps-10 pe-3 py-3 rounded-xl text-sm';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md overflow-y-auto">
-      <div className="relative w-full max-w-lg bg-white dark:bg-[#0c1224] rounded-3xl p-6 sm:p-8 shadow-2xl border border-slate-200 dark:border-white/15 my-8 text-start text-slate-900 dark:text-white">
-        {/* Close Button */}
-        <button
-          onClick={closeAuthModal}
-          className="absolute top-6 ltr:right-6 rtl:left-6 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition cursor-pointer"
-        >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md overflow-y-auto">
+      <div className="sadara-panel relative w-full max-w-md rounded-3xl p-7 sm:p-8 my-8">
+        <button onClick={closeAuthModal} aria-label="close" className="absolute top-5 end-5 p-2 rounded-xl opacity-60 hover:opacity-100 cursor-pointer">
           <X className="size-5" />
         </button>
 
-        {/* Modal Header & Tabs */}
-        <div className="mb-6">
-          <div className="flex gap-2 pb-3 border-b border-slate-100 dark:border-white/10">
-            <button
-              onClick={() => {
-                setMode('login');
-                setRecoverySent(false);
-              }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                mode === 'login'
-                  ? 'bg-cyan-500 text-white'
-                  : 'text-slate-500 hover:text-cyan-500'
-              }`}
-            >
-              تسجيل الدخول
-            </button>
-            <button
-              onClick={() => {
-                setMode('register');
-                setRecoverySent(false);
-              }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                mode === 'register'
-                  ? 'bg-cyan-500 text-white'
-                  : 'text-slate-500 hover:text-cyan-500'
-              }`}
-            >
-              إنشاء حساب جديد
-            </button>
-            <button
-              onClick={() => setMode('security')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                mode === 'security'
-                  ? 'bg-cyan-500 text-white'
-                  : 'text-slate-500 hover:text-cyan-500'
-              }`}
-            >
-              إعدادات الأمان والـ 2FA
-            </button>
-          </div>
+        <div className="text-center mb-6">
+          <img src="/logo.png" alt="Sadara" className="size-14 mx-auto mb-3 rounded-2xl" />
+          <h3 className="text-2xl font-black">
+            {mode === 'login' ? (ar ? 'تسجيل الدخول' : 'Sign in') : mode === 'register' ? (ar ? 'إنشاء حساب جديد' : 'Create account') : ar ? 'استعادة كلمة المرور' : 'Reset password'}
+          </h3>
+          <p className="text-sm opacity-70 mt-1">{ar ? 'منصة صدارة التعليمية — م. محمود شلتوت' : 'Sadara learning platform'}</p>
         </div>
 
-        {/* LOGIN / REGISTER FORM */}
-        {(mode === 'login' || mode === 'register') && (
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-xl font-black">
-                {mode === 'login' ? 'مرحباً بك مجدداً في صدارة' : 'إنشاء حساب طالب / ولي أمر جديد'}
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                ادخل بياناتك للوصول إلى الجلسات المباشرة وبنك الأسئلة والمحاكي.
-              </p>
-            </div>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                addNotification('تم تسجيل الدخول بنجاح', `أهلاً بك يا ${user.name}`);
-                closeAuthModal();
-              }}
-              className="space-y-3"
-            >
-              <div>
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                  البريد الإلكتروني
-                </label>
-                <div className="relative">
-                  <Mail className="size-4 text-slate-400 absolute ltr:left-3 rtl:right-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full ltr:pl-9 rtl:pr-9 py-2.5 px-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-xs text-slate-900 dark:text-white"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    كلمة المرور
-                  </label>
-                  {mode === 'login' && (
-                    <button
-                      type="button"
-                      onClick={() => setMode('forgot')}
-                      className="text-[11px] text-cyan-500 hover:underline cursor-pointer"
-                    >
-                      نسيت كلمة المرور؟
-                    </button>
-                  )}
-                </div>
-                <div className="relative">
-                  <Lock className="size-4 text-slate-400 absolute ltr:left-3 rtl:right-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full ltr:pl-9 rtl:pr-9 py-2.5 px-3 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-xs text-slate-900 dark:text-white"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-3 rounded-xl font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 shadow-lg shadow-cyan-500/25 cursor-pointer transition active:scale-95"
-              >
-                {mode === 'login' ? 'دخول فوري' : 'تأكيد التسجيل'}
+        {mode !== 'reset' && (
+          <>
+            <div className="grid gap-2.5">
+              <button type="button" onClick={() => social('google')} className="sadara-social">
+                <GoogleIcon />
+                <span>{ar ? 'المتابعة عبر Gmail / Google' : 'Continue with Google'}</span>
               </button>
-            </form>
-
-            {/* Social Logins: iCloud, Gmail, LinkedIn, X, Facebook, GitHub */}
-            <div className="pt-4 border-t border-slate-100 dark:border-white/10">
-              <span className="text-[11px] text-slate-400 block text-center mb-3">
-                أو الدخول بضغطة زر عبر حساباتك المعتمدة:
-              </span>
-
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    socialLogin('icloud');
-                    closeAuthModal();
-                  }}
-                  className="p-2 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <Apple className="size-4" />
-                  <span>iCloud</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    socialLogin('google');
-                    closeAuthModal();
-                  }}
-                  className="p-2 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <Globe className="size-4 text-rose-500" />
-                  <span>Google</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    socialLogin('linkedin');
-                    closeAuthModal();
-                  }}
-                  className="p-2 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <span className="font-bold text-blue-500">in</span>
-                  <span>LinkedIn</span>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 mt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    socialLogin('X (Twitter)');
-                    closeAuthModal();
-                  }}
-                  className="p-2 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <span className="font-black">𝕏</span>
-                  <span>X (Twitter)</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    socialLogin('Facebook');
-                    closeAuthModal();
-                  }}
-                  className="p-2 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <span className="font-bold text-blue-600">f</span>
-                  <span>Facebook</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    socialLogin('GitHub');
-                    closeAuthModal();
-                  }}
-                  className="p-2 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <span>GitHub</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* FORGOT PASSWORD FORM */}
-        {mode === 'forgot' && (
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-xl font-black">استعادة كلمة المرور</h3>
-              <p className="text-xs text-slate-500 mt-1">
-                اختر الطريقة الأنسب لك لاستلام رابط أو كود إعادة التعيين الفوري.
-              </p>
-            </div>
-
-            {recoverySent ? (
-              <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-xs space-y-2">
-                <div className="font-bold flex items-center gap-1.5">
-                  <CheckCircle2 className="size-4" />
-                  <span>تم إرسال تعليمات الاستعادة بنجاح!</span>
-                </div>
-                <div>
-                  يرجى تفقد رسائلك، أو التواصل مع الدعم المباشر على واتساب{' '}
-                  <span className="font-bold">{SITE_INFO.phone}</span>.
-                </div>
-                <button
-                  onClick={() => setMode('login')}
-                  className="mt-3 px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold cursor-pointer"
-                >
-                  العودة لتسجيل الدخول
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={handleSendRecovery} className="space-y-4">
-                <div>
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-2">
-                    قناة الاستعادة المفضلة:
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setRecoveryChannel('whatsapp')}
-                      className={`p-2.5 rounded-xl border text-xs font-bold transition cursor-pointer ${
-                        recoveryChannel === 'whatsapp'
-                          ? 'border-emerald-500 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                          : 'border-slate-200 dark:border-white/10 text-slate-500'
-                      }`}
-                    >
-                      واتساب (WhatsApp)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setRecoveryChannel('sms')}
-                      className={`p-2.5 rounded-xl border text-xs font-bold transition cursor-pointer ${
-                        recoveryChannel === 'sms'
-                          ? 'border-blue-500 bg-blue-500/15 text-blue-600 dark:text-blue-400'
-                          : 'border-slate-200 dark:border-white/10 text-slate-500'
-                      }`}
-                    >
-                      رسالة قصيرة SMS
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setRecoveryChannel('email')}
-                      className={`p-2.5 rounded-xl border text-xs font-bold transition cursor-pointer ${
-                        recoveryChannel === 'email'
-                          ? 'border-cyan-500 bg-cyan-500/15 text-cyan-600 dark:text-cyan-400'
-                          : 'border-slate-200 dark:border-white/10 text-slate-500'
-                      }`}
-                    >
-                      البريد الإلكتروني
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                    {recoveryChannel === 'email' ? 'أدخل بريدك الإلكتروني' : 'أدخل رقم جوالك'}
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={recoveryChannel === 'email' ? email : phone}
-                    onChange={(e) =>
-                      recoveryChannel === 'email'
-                        ? setEmail(e.target.value)
-                        : setPhone(e.target.value)
-                    }
-                    className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 text-xs text-slate-900 dark:text-white"
-                  />
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setMode('login')}
-                    className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 text-xs font-medium text-slate-500"
-                  >
-                    إلغاء
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex-1 py-2.5 rounded-xl font-bold text-xs text-white bg-cyan-600 hover:bg-cyan-500 cursor-pointer"
-                  >
-                    إرسال كود الاستعادة
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        )}
-
-        {/* SECURITY & 2FA & ACTIVE SESSIONS TAB */}
-        {mode === 'security' && (
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-xl font-black">إعدادات الأمان والمصادقة المتقدمة</h3>
-              <p className="text-xs text-slate-500 mt-1">
-                حماية الحساب، المصادقة الثنائية 2FA، وتقارير نشاط جلسات الدخول.
-              </p>
-            </div>
-
-            {/* 2FA Toggle */}
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-between">
-              <div>
-                <div className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <Key className="size-4 text-cyan-500" />
-                  <span>المصادقة الثنائية (Two-Factor Authentication 2FA)</span>
-                </div>
-                <div className="text-[11px] text-slate-400 mt-0.5">
-                  طلب رمز إضافي عند محاولة تسجيل الدخول من أجهزة جديدة.
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleToggle2FA}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
-                  twoFactorEnabled
-                    ? 'bg-emerald-500 text-white'
-                    : 'bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                }`}
-              >
-                {twoFactorEnabled ? 'مفعلة ✓' : 'معطلة'}
+              <button type="button" onClick={() => social('apple')} className="sadara-social">
+                <AppleIcon />
+                <span>{ar ? 'المتابعة عبر Apple / iCloud' : 'Continue with Apple'}</span>
+              </button>
+              <button type="button" onClick={() => social('microsoft')} className="sadara-social">
+                <MicrosoftIcon />
+                <span>{ar ? 'المتابعة عبر Microsoft / Outlook' : 'Continue with Microsoft'}</span>
               </button>
             </div>
-
-            {/* Logout from all devices button */}
-            <div className="p-4 rounded-2xl bg-rose-500/5 border border-rose-500/20 flex items-center justify-between">
-              <div>
-                <div className="font-bold text-xs sm:text-sm text-rose-500 flex items-center gap-1.5">
-                  <LogOut className="size-4" />
-                  <span>تسجيل الخروج من كافة الأجهزة المرتبطة فوراً</span>
-                </div>
-                <div className="text-[11px] text-slate-400 mt-0.5">
-                  إنهاء جميع الجلسات النشطة في حال الاشتباه بدخول غير معتاد.
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleLogoutAllDevices}
-                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white cursor-pointer active:scale-95 transition"
-              >
-                إنهاء الجلسات
-              </button>
+            <div className="flex items-center gap-3 my-5 text-xs opacity-60">
+              <span className="flex-1 h-px bg-current opacity-30" />
+              {ar ? 'أو بالبريد الإلكتروني' : 'or with email'}
+              <span className="flex-1 h-px bg-current opacity-30" />
             </div>
-
-            {/* Activity Log */}
-            <div>
-              <span className="text-xs font-bold text-slate-400 block mb-2">
-                سجل النشاط المفصل لآخر جلسات الدخول:
-              </span>
-              <div className="space-y-2">
-                {loginActivities.map((act) => (
-                  <div
-                    key={act.id}
-                    className="p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 flex items-center justify-between text-xs"
-                  >
-                    <div>
-                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                        <Smartphone className="size-3.5 text-cyan-500" />
-                        <span>{act.device}</span>
-                      </div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">
-                        {act.location} • IP: {act.ip}
-                      </div>
-                    </div>
-                    <span className="text-[10px] text-slate-400">{act.timestamp}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          </>
         )}
+
+        <form onSubmit={submit} className="space-y-3">
+          {mode === 'register' && (
+            <div className="relative">
+              <User className="size-4 absolute start-3.5 top-1/2 -translate-y-1/2 opacity-50" />
+              <input required value={name} onChange={(e) => setName(e.target.value)} placeholder={ar ? 'الاسم الكامل' : 'Full name'} className={input} />
+            </div>
+          )}
+          <div className="relative">
+            <Mail className="size-4 absolute start-3.5 top-1/2 -translate-y-1/2 opacity-50" />
+            <input required type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={ar ? 'البريد الإلكتروني' : 'Email'} className={input} dir="ltr" />
+          </div>
+          {mode !== 'reset' && (
+            <div className="relative">
+              <Lock className="size-4 absolute start-3.5 top-1/2 -translate-y-1/2 opacity-50" />
+              <input required minLength={6} type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={ar ? 'كلمة المرور (6 أحرف على الأقل)' : 'Password'} className={input} dir="ltr" />
+            </div>
+          )}
+
+          {error && <p className="text-sm text-rose-500 font-semibold">{error}</p>}
+          {info && <p className="text-sm text-emerald-500 font-semibold">{info}</p>}
+
+          <button type="submit" disabled={busy} className="sadara-btn-primary w-full py-3 rounded-xl text-base flex items-center justify-center gap-2">
+            {busy && <Loader2 className="size-4 animate-spin" />}
+            {mode === 'login' ? (ar ? 'دخول' : 'Sign in') : mode === 'register' ? (ar ? 'إنشاء الحساب' : 'Create account') : ar ? 'إرسال الرابط' : 'Send link'}
+          </button>
+        </form>
+
+        <div className="mt-5 text-sm text-center space-y-2">
+          {mode === 'login' && (
+            <>
+              <button onClick={() => setMode('reset')} className="text-cyan-500 hover:underline cursor-pointer block mx-auto">
+                {ar ? 'نسيت كلمة المرور؟' : 'Forgot password?'}
+              </button>
+              <p>
+                {ar ? 'ليس لديك حساب؟' : 'No account?'}{' '}
+                <button onClick={() => setMode('register')} className="text-cyan-500 font-bold hover:underline cursor-pointer">
+                  {ar ? 'سجّل الآن' : 'Sign up'}
+                </button>
+              </p>
+            </>
+          )}
+          {mode !== 'login' && (
+            <button onClick={() => setMode('login')} className="text-cyan-500 font-bold hover:underline cursor-pointer">
+              {ar ? 'لديك حساب؟ تسجيل الدخول' : 'Have an account? Sign in'}
+            </button>
+          )}
+        </div>
+
+        <div className="mt-5 flex items-center justify-center gap-1.5 text-[11px] opacity-60">
+          <ShieldCheck className="size-3.5" />
+          {ar ? 'بياناتك محمية ومشفّرة' : 'Your data is encrypted'}
+        </div>
       </div>
     </div>
   );
