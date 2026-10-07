@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import StudentsManager from './StudentsManager';
 import { Booking, Question, Article, TeacherRating } from '../types';
 import { TIME_SLOTS, DAYS_LIST } from '../data/mockData';
 import {
@@ -632,36 +633,7 @@ export const AdminDashboard: React.FC = () => {
       )}
 
       {/* Tab 6: Users & RBAC */}
-      {activeTab === 'users' && (
-        <div className="p-6 rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#0c1224] text-start">
-          <h4 className="font-bold text-base text-slate-900 dark:text-white mb-4">
-            إدارة الأدوار وصلاحيات المنصة (RBAC Matrix)
-          </h4>
-
-          <div className="space-y-3 text-xs">
-            {[
-              { role: 'طالب (Student)', desc: 'حضور الجلسات، بنك الأسئلة، محاكي المفاعل، استخراج الشهادات', activeCount: '12,400' },
-              { role: 'معلم (Teacher - م. محمود شلتوت)', desc: 'بدء الجلسات على زوم، الرد على المحادثات، مراجعة الحجوزات', activeCount: '1' },
-              { role: 'ولي أمر (Parent)', desc: 'متابعة تقارير حضور الطالب، النتائج، والتواصل مع المدرس', activeCount: '3,210' },
-              { role: 'مشرف أكاديمي (Supervisor)', desc: 'مراقبة جودة الشروحات، إحصائيات الغياب، تدقيق الأسئلة', activeCount: '12' },
-              { role: 'مدير المنصة (Admin)', desc: 'تحكم شامل بالإعدادات، بوابات الدفع، والتقارير المالية', activeCount: '3' },
-            ].map((r, i) => (
-              <div
-                key={i}
-                className="p-3.5 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 flex items-center justify-between"
-              >
-                <div>
-                  <div className="font-bold text-slate-900 dark:text-white">{r.role}</div>
-                  <div className="text-slate-400 mt-0.5">{r.desc}</div>
-                </div>
-                <span className="font-mono font-bold text-cyan-500 bg-cyan-500/10 px-2.5 py-1 rounded-lg">
-                  {r.activeCount} مستخدم
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {activeTab === 'users' && <StudentsManager />}
     </section>
   );
 };
