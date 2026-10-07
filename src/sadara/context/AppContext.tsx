@@ -283,9 +283,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const emailSignIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return error.message;
+    const { data: signed, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return error.message === 'Invalid login credentials' ? 'البريد أو كلمة المرور غير صحيحة' : error.message;
     setIsAuthModalOpen(false);
+    const { data: rs } = await supabase.from('user_roles').select('role').eq('user_id', signed.user.id);
+    setActiveTab((rs ?? []).some((r: any) => r.role === 'admin') ? 'admin' : 'student');
     addNotification('تسجيل الدخول', 'مرحباً بعودتك إلى منصة صدارة.');
     return null;
   };
