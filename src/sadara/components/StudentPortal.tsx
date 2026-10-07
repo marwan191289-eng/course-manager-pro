@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import AiTutor from './AiTutor';
 import {
   GraduationCap,
   Award,
@@ -24,7 +25,7 @@ import {
 export const StudentPortal: React.FC = () => {
   const { lang, user, openCertificateModal, addNotification } = useApp();
 
-  const [activeLessonTab, setActiveLessonTab] = useState<'lessons' | 'analytics' | 'chat'>('lessons');
+  const [activeLessonTab, setActiveLessonTab] = useState<'lessons' | 'analytics' | 'chat' | 'ai'>('lessons');
   const [selectedLesson, setSelectedLesson] = useState<number>(0);
 
   // Video player interactive state
@@ -333,7 +334,21 @@ export const StudentPortal: React.FC = () => {
           <MessageCircle className="size-4" />
           <span>{lang === 'ar' ? 'محادثة المعلم المباشرة' : 'Direct Teacher Chat'}</span>
         </button>
+
+        <button
+          onClick={() => setActiveLessonTab('ai')}
+          className={`px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 cursor-pointer transition ${
+            activeLessonTab === 'ai' ? 'bg-cyan-500 text-white shadow-md' : 'text-slate-600 dark:text-slate-400 hover:text-cyan-500'
+          }`}
+        >
+          <Sparkles className="size-4" />
+          <span>{lang === 'ar' ? 'المساعد الذكي' : 'AI Tutor'}</span>
+        </button>
       </div>
+
+      {activeLessonTab === 'ai' && (
+        <AiTutor lesson={{ title: currentLessonData.title, notes: currentLessonData.notes, formula: currentLessonData.keyFormula }} />
+      )}
 
       {/* Tab 1: Video Lessons Player */}
       {activeLessonTab === 'lessons' && (
