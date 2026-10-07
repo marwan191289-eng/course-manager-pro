@@ -36,12 +36,13 @@ export const TestimonialSlider: React.FC = () => {
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
+    touchStartX.current = e.touches[0]?.clientX ?? null;
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (touchStartX.current === null) return;
-    const touchEndX = e.changedTouches[0].clientX;
+    const touchEndX = e.changedTouches[0]?.clientX;
+    if (touchEndX === undefined) return;
     const diff = touchStartX.current - touchEndX;
 
     if (Math.abs(diff) > 50) {
@@ -57,6 +58,7 @@ export const TestimonialSlider: React.FC = () => {
   };
 
   const current = TESTIMONIALS[currentIndex];
+  if (!current) return null;
 
   return (
     <section
